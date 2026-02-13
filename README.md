@@ -23,6 +23,7 @@ pip install -r requirements.txt
 ```powershell
 cp .env.example .env
 ```
+.env 파일을 열어서 실제 값으로 수정하세요.
 
 ### 4. 데이터베이스 마이그레이션
 ```powershell
@@ -65,3 +66,46 @@ Authorization: Bearer {access_token}
 - Access Token: 1시간
 - Refresh Token: 7일
 - 자동 로그아웃: Access Token 만료 시
+
+## Docker 배포
+
+### 1. 환경변수 파일 생성
+```powershell
+cp .env.example .env
+```
+`.env` 파일을 열어서 실제 값으로 수정하세요.
+
+### 2. MySQL과 함께 배포
+```powershell
+docker-compose up -d
+```
+
+### 배포 스크립트 실행
+```powershell
+.\deploy.ps1
+```
+
+### 유용한 Docker 명령어
+```powershell
+docker-compose logs -f backend
+docker-compose exec backend python manage.py createsuperuser
+docker-compose exec backend python manage.py migrate
+docker-compose down
+docker-compose down -v
+```
+
+## 환경변수 설정
+
+`.env` 파일을 프로젝트 루트에 생성하세요 (`.env.example` 참고)
+
+주요 환경변수:
+- `SECRET_KEY` - Django 시크릿 키 (필수 변경)
+- `DEBUG` - 디버그 모드 (프로덕션: False)
+- `ALLOWED_HOSTS` - 허용 호스트 (쉼표 구분)
+- `DATABASE_ENGINE` - django.db.backends.mysql (고정)
+- `DATABASE_NAME` - DB 이름
+- `DATABASE_USER` - DB 사용자
+- `DATABASE_PASSWORD` - DB 비밀번호
+- `DATABASE_HOST` - DB 호스트 (Docker: db, 외부: IP/도메인)
+- `DATABASE_PORT` - DB 포트 (기본: 3306)
+- `CORS_ALLOWED_ORIGINS` - CORS 허용 도메인 (쉼표 구분)
