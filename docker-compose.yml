@@ -4,21 +4,10 @@ services:
   db:
     image: mysql:8.0
     container_name: db
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
     env_file:
       - .db.env
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
-      interval: 5s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
     restart: unless-stopped
   backend:
     build: .
@@ -32,8 +21,7 @@ services:
     env_file:
       - .env
     depends_on:
-      db:
-        condition: service_healthy
+      - db
     restart: unless-stopped
 volumes:
   mysql_data:
