@@ -3,31 +3,27 @@ version: '3.8'
 services:
   db:
     image: mysql:8.0
-    container_name: drf_db
+    container_name: db
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: drf_backend
-      MYSQL_USER: drf_user
-      MYSQL_PASSWORD: drf_password
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
-    ports:
-      - "3306:3306"
+    env_file:
+      - .db.env
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 5s
       timeout: 10s
       retries: 10
       start_period: 30s
     restart: unless-stopped
-
   backend:
     build: .
-    container_name: drf_backend
-    command: >
-      sh -c "python manage.py migrate &&
-             python manage.py collectstatic --noinput &&
-             gunicorn --bind 0.0.0.0:8000 --workers 4 --timeout 120 config.wsgi:application"
+    container_name: backend
+    command: gunicorn --bind 0.0.0.0:8000 --workers 4 --timeout 120 config.wsgi:application
     volumes:
       - ./:/app
       - static_volume:/app/staticfiles
@@ -39,7 +35,6 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
-
 volumes:
   mysql_data:
   static_volume:

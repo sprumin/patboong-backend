@@ -8,35 +8,67 @@
 
 ## 설치 및 실행
 
-### 1. 가상환경 생성 및 활성화
+### Docker로 실행 (권장)
+
+#### 1. 환경변수 설정
+```bash
+# Django 설정
+cp .env.example .env
+
+# MySQL 설정
+cp .db.env.example .db.env
+```
+각 파일을 열어서 실제 값으로 수정하세요.
+
+#### 2. Docker Compose로 실행
+```bash
+docker-compose up -d
+```
+
+#### 3. 마이그레이션 확인
+마이그레이션 파일이 이미 포함되어 있으므로 자동으로 실행됩니다.
+
+#### 4. 슈퍼유저 생성
+```bash
+docker exec -it backend python manage.py createsuperuser
+```
+
+#### 5. 접속
+- API: http://localhost:8000/api/boards/
+- Admin: http://localhost:8000/admin/
+
+---
+
+### 로컬 개발 환경
+
+#### 1. 가상환경 생성 및 활성화
 ```powershell
 python -m venv venv
 .\venv\Scripts\activate
 ```
 
-### 2. 패키지 설치
+#### 2. 패키지 설치
 ```powershell
 pip install -r requirements.txt
 ```
 
-### 3. 환경변수 설정
+#### 3. 환경변수 설정
 ```powershell
 cp .env.example .env
 ```
 .env 파일을 열어서 실제 값으로 수정하세요.
 
-### 4. 데이터베이스 마이그레이션
+#### 4. 데이터베이스 마이그레이션
 ```powershell
-python manage.py makemigrations
 python manage.py migrate
 ```
 
-### 5. 슈퍼유저 생성
+#### 5. 슈퍼유저 생성
 ```powershell
 python manage.py createsuperuser
 ```
 
-### 6. 서버 실행
+#### 6. 서버 실행
 ```powershell
 python manage.py runserver
 ```
