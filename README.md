@@ -89,6 +89,107 @@ python manage.py runserver
 - `PUT /api/boards/{id}/` - 게시글 수정
 - `DELETE /api/boards/{id}/` - 게시글 삭제
 
+## API 상세 설명
+
+### 회원가입 (POST /api/accounts/register/)
+
+**요청 예시:**
+```json
+{
+  "userId": "hong123",
+  "userPw": "password123!@",
+  "mainLine": "mid",
+  "subLine": "top",
+  "tierTop": "gold",
+  "tierJungle": "silver",
+  "tierMid": "platinum",
+  "tierAdc": "bronze",
+  "tierSupport": "iron",
+  "question": "pet",
+  "answer": "멍멍이",
+  "serviceTerms": true,
+  "privacyTerms": true,
+  "ageTerms": true,
+  "marketingTerms": false,
+  "eventTerms": false
+}
+```
+
+**필드 설명:**
+- `userId` (string, 필수): 로그인 아이디 (중복 불가)
+- `userPw` (string, 필수): 비밀번호 (서버에서 bcrypt로 암호화 저장)
+- `mainLine` (string, 선택): 주 라인 (top, jungle, mid, adc, support)
+- `subLine` (string, 선택): 부 라인 (top, jungle, mid, adc, support)
+- `tierTop` (string, 선택): 탑 티어 (iron, bronze, silver, gold, platinum, diamond, master, grandmaster, challenger)
+- `tierJungle` (string, 선택): 정글 티어
+- `tierMid` (string, 선택): 미드 티어
+- `tierAdc` (string, 선택): 원딜 티어
+- `tierSupport` (string, 선택): 서포트 티어
+- `question` (string, 필수): 비밀번호 찾기 질문 (pet, school, food, city, friend)
+- `answer` (string, 필수): 비밀번호 찾기 답변
+- `serviceTerms` (boolean, 필수): 서비스 이용약관 동의
+- `privacyTerms` (boolean, 필수): 개인정보 수집 동의
+- `ageTerms` (boolean, 필수): 만 14세 이상 확인
+- `marketingTerms` (boolean, 선택): 마케팅 수신 동의
+- `eventTerms` (boolean, 선택): 이벤트 알림 동의
+
+**응답 예시 (성공):**
+```json
+{
+  "id": 1,
+  "username": "hong123",
+  "email": "",
+  "mainLine": "mid",
+  "subLine": "top",
+  "tierTop": "gold",
+  "tierJungle": "silver",
+  "tierMid": "platinum",
+  "tierAdc": "bronze",
+  "tierSupport": "iron",
+  "question": "pet",
+  "answer": "멍멍이",
+  "serviceTerms": true,
+  "privacyTerms": true,
+  "ageTerms": true,
+  "marketingTerms": false,
+  "eventTerms": false,
+  "created_at": "2026-03-30T10:30:00Z"
+}
+```
+
+### 프로필 조회 (GET /api/accounts/profile/)
+
+**요청 헤더:**
+```
+Authorization: Bearer {access_token}
+```
+
+**응답 예시:**
+```json
+{
+  "id": 1,
+  "username": "hong123",
+  "email": "",
+  "mainLine": "mid",
+  "subLine": "top",
+  "tierTop": "gold",
+  "tierJungle": "silver",
+  "tierMid": "platinum",
+  "tierAdc": "bronze",
+  "tierSupport": "iron",
+  "question": "pet",
+  "answer": "멍멍이",
+  "serviceTerms": true,
+  "privacyTerms": true,
+  "ageTerms": true,
+  "marketingTerms": false,
+  "eventTerms": false,
+  "created_at": "2026-03-30T10:30:00Z"
+}
+```
+
+**주의:** 비밀번호(`userPw`)는 보안을 위해 응답에 포함되지 않습니다.
+
 ## 인증 헤더
 ```
 Authorization: Bearer {access_token}
