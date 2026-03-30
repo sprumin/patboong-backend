@@ -36,6 +36,8 @@ docker exec -it backend python manage.py createsuperuser
 #### 5. 접속
 - API: http://localhost:8000/api/boards/
 - Admin: http://localhost:8000/admin/
+- **API 문서 (Swagger UI): http://localhost:8000/api/docs/**
+- **API 문서 (ReDoc): http://localhost:8000/api/redoc/**
 
 ---
 
@@ -75,6 +77,11 @@ python manage.py runserver
 
 ## API 엔드포인트
 
+### API 문서
+- **Swagger UI**: http://localhost:8000/api/docs/
+- **ReDoc**: http://localhost:8000/api/redoc/
+- **OpenAPI Schema**: http://localhost:8000/api/schema/
+
 ### 인증 (Accounts)
 - `POST /api/accounts/register/` - 회원가입
 - `POST /api/accounts/login/` - 로그인
@@ -88,6 +95,8 @@ python manage.py runserver
 - `GET /api/boards/{id}/` - 게시글 상세
 - `PUT /api/boards/{id}/` - 게시글 수정
 - `DELETE /api/boards/{id}/` - 게시글 삭제
+
+> 💡 **Tip**: Swagger UI(http://localhost:8000/api/docs/)에서 모든 API를 테스트할 수 있습니다!
 
 ## API 상세 설명
 
@@ -189,6 +198,30 @@ Authorization: Bearer {access_token}
 ```
 
 **주의:** 비밀번호(`userPw`)는 보안을 위해 응답에 포함되지 않습니다.
+
+## Swagger UI 사용 방법
+
+### 1. Swagger UI 접속
+브라우저에서 http://localhost:8000/api/docs/ 로 이동합니다.
+
+### 2. API 테스트하기
+
+#### 인증이 필요 없는 API
+- **회원가입**: `/api/accounts/register/` 섹션을 펼치고 "Try it out" 클릭
+- **로그인**: `/api/accounts/login/` 섹션에서 테스트
+
+#### 인증이 필요한 API
+1. 먼저 로그인 API를 호출하여 `access` 토큰을 받습니다
+2. 페이지 상단의 **Authorize** 버튼 클릭
+3. Value 입력란에 `Bearer <access_token>` 형식으로 입력
+4. Authorize 버튼 클릭
+5. 이제 인증이 필요한 API(게시글 작성, 프로필 조회 등)를 테스트할 수 있습니다
+
+### 3. API 문서 특징
+- **실시간 테스트**: 모든 API를 브라우저에서 직접 호출 가능
+- **자동 갱신**: 코드 변경 시 문서도 자동으로 업데이트
+- **상세한 설명**: 각 필드의 타입, 필수 여부, 설명 제공
+- **예시 데이터**: 요청/응답 예시 자동 생성
 
 ## 인증 헤더
 ```
