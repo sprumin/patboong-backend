@@ -7,13 +7,16 @@ if [ ! -f .env ]; then
 fi
 
 echo "🔨 Building Docker image..."
-docker build -t drf-backend .
+docker-compose build --no-cache
 
 echo "🚀 Starting containers..."
 docker-compose up -d
 
 echo "⏳ Waiting for database..."
 sleep 10
+
+echo "📦 Collecting static files..."
+docker-compose exec backend python manage.py collectstatic --noinput
 
 echo "📦 Running migrations..."
 docker-compose exec backend python manage.py migrate
@@ -22,6 +25,8 @@ echo ""
 echo "=================================================="
 echo "✅ 배포 완료!"
 echo "🌐 Backend URL: http://localhost:8000"
+echo "🌐 API 문서 (Swagger): http://localhost:8000/api/docs/"
+echo "🌐 API 문서 (ReDoc): http://localhost:8000/api/redoc/"
 echo ""
 echo "🔑 슈퍼유저 생성:"
 echo "   docker-compose exec backend python manage.py createsuperuser"
