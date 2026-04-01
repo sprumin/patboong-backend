@@ -14,45 +14,68 @@ User = get_user_model()
 @extend_schema(
     tags=["accounts"],
     summary="회원가입",
-    description="새로운 사용자를 등록합니다. 롤 듀오 매칭을 위한 게임 정보와 약관 동의가 필요합니다.",
+    description="새로운 사용자를 등록합니다. 필수: 아이디, 비밀번호, 약관 동의 3개",
     request=RegisterSerializer,
     responses={201: UserSerializer},
+    auth=[],
     examples=[
         OpenApiExample(
-            "회원가입 예시",
+            "최소 필수 정보만",
             value={
-                "userId": "hong123",
-                "userPw": "password123!@",
-                "mainLine": "mid",
-                "subLine": "top",
-                "tierTop": "gold",
-                "tierJungle": "silver",
-                "tierMid": "platinum",
-                "tierAdc": "bronze",
-                "tierSupport": "iron",
-                "question": "pet",
-                "answer": "멍멍이",
-                "serviceTerms": True,
-                "privacyTerms": True,
-                "ageTerms": True,
-                "marketingTerms": False,
-                "eventTerms": False,
+                "user_id": "hong123",
+                "user_pw": "Password123!@#",
+                "service_terms": True,
+                "privacy_terms": True,
+                "age_terms": True,
             },
             request_only=True,
-        )
+        ),
+        OpenApiExample(
+            "전체 정보 포함",
+            value={
+                "user_id": "hong456",
+                "user_pw": "Password123!@#",
+                "main_line": "mid",
+                "sub_line": "top",
+                "tier_top": "gold",
+                "tier_jungle": "silver",
+                "tier_mid": "platinum",
+                "tier_adc": "bronze",
+                "tier_support": "iron",
+                "question": "pet",
+                "answer": "멍멍이",
+                "service_terms": True,
+                "privacy_terms": True,
+                "age_terms": True,
+                "marketing_terms": False,
+                "event_terms": False,
+            },
+            request_only=True,
+        ),
     ],
 )
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     permission_classes = (AllowAny,)
     serializer_class = RegisterSerializer
-
+    
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            UserSerializer(user).data,
+            status=status.HTTP_201_CREATED,
+            headers=headers
+        )
 
 @extend_schema(
     tags=["accounts"],
     summary="로그인",
     description="사용자 인증 후 JWT 토큰을 발급합니다.",
     request=LoginSerializer,
+    auth=[],
     responses={
         200: {
             "type": "object",
@@ -66,7 +89,7 @@ class RegisterView(generics.CreateAPIView):
     examples=[
         OpenApiExample(
             "로그인 요청 예시",
-            value={"username": "hong123", "password": "password123!@"},
+            value={"username": "hong123", "password": "Password123!@#"},
             request_only=True,
         )
     ],
