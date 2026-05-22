@@ -3,7 +3,7 @@ from django.db import models
 
 
 class User(AbstractUser):
-    email = models.EmailField(unique=True)
+    email = models.EmailField(unique=True, null=True, blank=True, default=None)
 
     main_line = models.CharField(max_length=20, blank=True, default="")
     sub_line = models.CharField(max_length=20, blank=True, default="")

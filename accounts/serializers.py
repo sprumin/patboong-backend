@@ -76,7 +76,7 @@ class RegisterSerializer(serializers.Serializer):
         user = User.objects.create_user(
             username=user_id,
             password=user_pw,
-            email="",
+            email=None,
             main_line=validated_data.get("main_line", ""),
             sub_line=validated_data.get("sub_line", ""),
             tier_top=validated_data.get("tier_top", ""),
