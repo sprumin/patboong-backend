@@ -36,7 +36,7 @@ class RegisterSerializer(serializers.Serializer):
     user_pw = serializers.CharField(
         write_only=True,
         required=True,
-        style={'input_type': 'password'},
+        style={"input_type": "password"},
         validators=[validate_password],
     )
     main_line = serializers.CharField(required=False, allow_blank=True, default="")
@@ -72,7 +72,7 @@ class RegisterSerializer(serializers.Serializer):
     def create(self, validated_data):
         user_id = validated_data.pop("user_id")
         user_pw = validated_data.pop("user_pw")
-        
+
         user = User.objects.create_user(
             username=user_id,
             password=user_pw,
