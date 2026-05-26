@@ -3,6 +3,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 from django.contrib.auth import authenticate, get_user_model
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
@@ -137,12 +138,23 @@ def login_view(request):
 def logout_view(request):
     try:
         refresh_token = request.data.get("refresh")
+        if not refresh_token:
+            return Response(
+                {"detail": "refresh 토큰이 필요합니다."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         token = RefreshToken(refresh_token)
         token.blacklist()
         return Response({"detail": "로그아웃 되었습니다."})
+    except (TokenError, InvalidToken):
+        return Response(
+            {"detail": "유효하지 않거나 만료된 토큰입니다."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     except Exception:
         return Response(
-            {"detail": "유효하지 않은 토큰입니다."}, status=status.HTTP_400_BAD_REQUEST
+            {"detail": "로그아웃 처리 중 오류가 발생했습니다."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
 

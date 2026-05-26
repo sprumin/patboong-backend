@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
+from django.db import IntegrityError
 
 User = get_user_model()
 
@@ -54,6 +55,11 @@ class RegisterSerializer(serializers.Serializer):
     marketing_terms = serializers.BooleanField(required=False, default=False)
     event_terms = serializers.BooleanField(required=False, default=False)
 
+    def validate_user_id(self, value):
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("이미 사용 중인 아이디입니다.")
+        return value
+
     def validate(self, attrs):
         if not attrs.get("service_terms"):
             raise serializers.ValidationError(
@@ -73,25 +79,30 @@ class RegisterSerializer(serializers.Serializer):
         user_id = validated_data.pop("user_id")
         user_pw = validated_data.pop("user_pw")
 
-        user = User.objects.create_user(
-            username=user_id,
-            password=user_pw,
-            email=None,
-            main_line=validated_data.get("main_line", ""),
-            sub_line=validated_data.get("sub_line", ""),
-            tier_top=validated_data.get("tier_top", ""),
-            tier_jungle=validated_data.get("tier_jungle", ""),
-            tier_mid=validated_data.get("tier_mid", ""),
-            tier_adc=validated_data.get("tier_adc", ""),
-            tier_support=validated_data.get("tier_support", ""),
-            question=validated_data.get("question", ""),
-            answer=validated_data.get("answer", ""),
-            service_terms=validated_data.get("service_terms", False),
-            privacy_terms=validated_data.get("privacy_terms", False),
-            age_terms=validated_data.get("age_terms", False),
-            marketing_terms=validated_data.get("marketing_terms", False),
-            event_terms=validated_data.get("event_terms", False),
-        )
+        try:
+            user = User.objects.create_user(
+                username=user_id,
+                password=user_pw,
+                email=None,
+                main_line=validated_data.get("main_line", ""),
+                sub_line=validated_data.get("sub_line", ""),
+                tier_top=validated_data.get("tier_top", ""),
+                tier_jungle=validated_data.get("tier_jungle", ""),
+                tier_mid=validated_data.get("tier_mid", ""),
+                tier_adc=validated_data.get("tier_adc", ""),
+                tier_support=validated_data.get("tier_support", ""),
+                question=validated_data.get("question", ""),
+                answer=validated_data.get("answer", ""),
+                service_terms=validated_data.get("service_terms", False),
+                privacy_terms=validated_data.get("privacy_terms", False),
+                age_terms=validated_data.get("age_terms", False),
+                marketing_terms=validated_data.get("marketing_terms", False),
+                event_terms=validated_data.get("event_terms", False),
+            )
+        except IntegrityError:
+            raise serializers.ValidationError(
+                {"user_id": "이미 사용 중인 아이디입니다."}
+            )
         return user
 
 
