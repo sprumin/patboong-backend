@@ -9,6 +9,12 @@ services:
     env_file:
       - .db.env
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "--silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
   backend:
     build: .
     container_name: backend
@@ -21,7 +27,8 @@ services:
     env_file:
       - .env
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     restart: unless-stopped
 volumes:
   mysql_data:

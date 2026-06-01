@@ -13,7 +13,11 @@ echo "🚀 Starting containers..."
 docker-compose up -d
 
 echo "⏳ Waiting for database..."
-sleep 10
+until docker-compose exec -T db mysqladmin ping -h "localhost" --silent; do
+    echo "  database is not ready yet, retrying in 2s..."
+    sleep 2
+done
+echo "✅ Database is ready!"
 
 echo "📦 Collecting static files..."
 docker-compose exec backend python manage.py collectstatic --noinput

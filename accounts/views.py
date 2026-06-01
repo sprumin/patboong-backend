@@ -25,6 +25,8 @@ User = get_user_model()
             value={
                 "user_id": "hong123",
                 "user_pw": "Password123!@#",
+                "user_pw_confirm": "Password123!@#",
+                "email": "hong123@example.com",
                 "service_terms": True,
                 "privacy_terms": True,
                 "age_terms": True,
@@ -36,6 +38,8 @@ User = get_user_model()
             value={
                 "user_id": "hong456",
                 "user_pw": "Password123!@#",
+                "user_pw_confirm": "Password123!@#",
+                "email": "hong456@example.com",
                 "main_line": "mid",
                 "sub_line": "top",
                 "tier_top": "gold",
@@ -90,7 +94,7 @@ class RegisterView(generics.CreateAPIView):
     examples=[
         OpenApiExample(
             "로그인 요청 예시",
-            value={"username": "hong123", "password": "Password123!@#"},
+            value={"user_id": "hong123", "password": "Password123!@#"},
             request_only=True,
         )
     ],
@@ -102,7 +106,7 @@ def login_view(request):
     serializer.is_valid(raise_exception=True)
 
     user = authenticate(
-        username=serializer.validated_data["username"],
+        username=serializer.validated_data["user_id"],
         password=serializer.validated_data["password"],
     )
 
