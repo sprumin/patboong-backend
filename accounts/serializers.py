@@ -42,19 +42,21 @@ class RegisterSerializer(serializers.Serializer):
     )
     user_pw_confirm = serializers.CharField(
         write_only=True,
-        required=True,
+        required=False,
+        allow_blank=True,
+        default="",
         style={"input_type": "password"},
     )
     email = serializers.EmailField(required=True)
-    main_line = serializers.CharField(required=False, allow_blank=True, default="")
-    sub_line = serializers.CharField(required=False, allow_blank=True, default="")
-    tier_top = serializers.CharField(required=False, allow_blank=True, default="")
-    tier_jungle = serializers.CharField(required=False, allow_blank=True, default="")
-    tier_mid = serializers.CharField(required=False, allow_blank=True, default="")
-    tier_adc = serializers.CharField(required=False, allow_blank=True, default="")
-    tier_support = serializers.CharField(required=False, allow_blank=True, default="")
-    question = serializers.CharField(required=False, allow_blank=True, default="")
-    answer = serializers.CharField(required=False, allow_blank=True, default="")
+    main_line = serializers.CharField(required=True)
+    sub_line = serializers.CharField(required=True)
+    tier_top = serializers.CharField(required=True)
+    tier_jungle = serializers.CharField(required=True)
+    tier_mid = serializers.CharField(required=True)
+    tier_adc = serializers.CharField(required=True)
+    tier_support = serializers.CharField(required=True)
+    question = serializers.CharField(required=True)
+    answer = serializers.CharField(required=True)
     service_terms = serializers.BooleanField(required=True)
     privacy_terms = serializers.BooleanField(required=True)
     age_terms = serializers.BooleanField(required=True)
