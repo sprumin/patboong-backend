@@ -40,13 +40,6 @@ class RegisterSerializer(serializers.Serializer):
         style={"input_type": "password"},
         validators=[validate_password],
     )
-    user_pw_confirm = serializers.CharField(
-        write_only=True,
-        required=False,
-        allow_blank=True,
-        default="",
-        style={"input_type": "password"},
-    )
     email = serializers.EmailField(required=True)
     main_line = serializers.CharField(required=True)
     sub_line = serializers.CharField(required=True)
@@ -74,10 +67,6 @@ class RegisterSerializer(serializers.Serializer):
         return value
 
     def validate(self, attrs):
-        if attrs.get("user_pw") != attrs.get("user_pw_confirm"):
-            raise serializers.ValidationError(
-                {"user_pw_confirm": "비밀번호가 일치하지 않습니다."}
-            )
         if not attrs.get("service_terms"):
             raise serializers.ValidationError(
                 {"service_terms": "서비스 이용약관 동의는 필수입니다."}
@@ -95,7 +84,6 @@ class RegisterSerializer(serializers.Serializer):
     def create(self, validated_data):
         user_id = validated_data.pop("user_id")
         user_pw = validated_data.pop("user_pw")
-        validated_data.pop("user_pw_confirm", None)
 
         try:
             user = User.objects.create_user(

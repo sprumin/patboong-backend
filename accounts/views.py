@@ -25,7 +25,6 @@ User = get_user_model()
             value={
                 "user_id": "hong123",
                 "user_pw": "Password123!@#",
-                "user_pw_confirm": "Password123!@#",
                 "email": "hong123@example.com",
                 "service_terms": True,
                 "privacy_terms": True,
@@ -38,7 +37,6 @@ User = get_user_model()
             value={
                 "user_id": "hong456",
                 "user_pw": "Password123!@#",
-                "user_pw_confirm": "Password123!@#",
                 "email": "hong456@example.com",
                 "main_line": "mid",
                 "sub_line": "top",
