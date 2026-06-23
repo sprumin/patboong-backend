@@ -38,6 +38,12 @@ class User(AbstractUser):
     marketing_terms = models.BooleanField(default=False)
     event_terms = models.BooleanField(default=False)
 
+    riot_game_name = models.CharField(max_length=100, blank=True, default="")
+    riot_tag_line = models.CharField(max_length=50, blank=True, default="")
+    riot_server = models.CharField(max_length=20, blank=True, default="")
+    puuid = models.CharField(max_length=100, unique=True, null=True, blank=True)
+    verified_at = models.DateTimeField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -50,3 +56,25 @@ class User(AbstractUser):
 
     def __str__(self):
         return self.username
+
+
+class Friendship(models.Model):
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="friendships"
+    )
+    friend = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="friended_by"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "friendships"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("user", "friend"), name="unique_user_friend"
+            )
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user.username} -> {self.friend.username}"

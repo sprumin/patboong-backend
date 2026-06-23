@@ -139,3 +139,6 @@ CORS_ALLOWED_ORIGINS = config(
     "CORS_ALLOWED_ORIGINS", default="http://localhost:3000"
 ).split(",")
 CORS_ALLOW_CREDENTIALS = True
+
+RIOT_API_KEY = config("RIOT_API_KEY", default="")
+RIOT_API_TIMEOUT = config("RIOT_API_TIMEOUT", default=10, cast=int)

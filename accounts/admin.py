@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth import get_user_model
+from .models import Friendship
 
 User = get_user_model()
 
@@ -13,3 +14,9 @@ class CustomUserAdmin(UserAdmin):
         ("추가 정보", {"fields": ("created_at", "updated_at")}),
     )
     readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(Friendship)
+class FriendshipAdmin(admin.ModelAdmin):
+    list_display = ("user", "friend", "created_at")
+    search_fields = ("user__username", "friend__username")

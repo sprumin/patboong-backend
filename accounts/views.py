@@ -5,9 +5,19 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 from django.contrib.auth import authenticate, get_user_model
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
-from .serializers import RegisterSerializer, LoginSerializer, UserSerializer
+from .models import Friendship
+from .riot import RiotClient
+from .serializers import (
+    FriendAddSerializer,
+    FriendProfileSerializer,
+    LoginSerializer,
+    ProfileUpdateSerializer,
+    RegisterSerializer,
+    UserSerializer,
+)
 
 User = get_user_model()
 
@@ -166,8 +176,124 @@ def logout_view(request):
     description="현재 로그인한 사용자의 프로필 정보를 조회합니다. 비밀번호는 제외됩니다.",
     responses={200: UserSerializer},
 )
-@api_view(["GET"])
+@api_view(["GET", "PUT", "PATCH"])
 @permission_classes([IsAuthenticated])
 def profile_view(request):
+    if request.method in ("PUT", "PATCH"):
+        serializer = ProfileUpdateSerializer(
+            request.user,
+            data=request.data,
+            partial=request.method == "PATCH",
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
     serializer = UserSerializer(request.user)
     return Response(serializer.data)
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def friends_view(request):
+    if request.method == "POST":
+        serializer = FriendAddSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        friendship = serializer.save()
+        return Response(
+            FriendProfileSerializer(friendship.friend).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    friends = User.objects.filter(friended_by__user=request.user).order_by("username")
+    return Response(FriendProfileSerializer(friends, many=True).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def incoming_friend_requests_view(request):
+    incoming = User.objects.filter(friendships__friend=request.user).exclude(
+        friended_by__user=request.user
+    ).order_by("username")
+    return Response(FriendProfileSerializer(incoming, many=True).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def friend_profile_view(request, user_id):
+    friendship = Friendship.objects.select_related("friend").filter(
+        user=request.user, friend_id=user_id
+    ).first()
+    if not friendship:
+        return Response(
+            {"detail": "Friend not found."}, status=status.HTTP_404_NOT_FOUND
+        )
+    return Response(FriendProfileSerializer(friendship.friend).data)
+
+
+def _riot_profile_or_error(user):
+    if not user.puuid or not user.riot_server:
+        return Response(
+            {
+                "code": "RIOT_ACCOUNT_NOT_VERIFIED",
+                "detail": "Verify a Riot account before requesting matches.",
+                "retryable": False,
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return None
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def match_list_view(request):
+    error = _riot_profile_or_error(request.user)
+    if error:
+        return error
+
+    try:
+        start = max(int(request.query_params.get("start", 0)), 0)
+        count = min(max(int(request.query_params.get("count", 20)), 1), 100)
+    except ValueError:
+        return Response(
+            {"detail": "start and count must be integers."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    matches = RiotClient().get_match_ids(
+        request.user.puuid, request.user.riot_server, start=start, count=count
+    )
+    return Response({"puuid": request.user.puuid, "match_ids": matches})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def match_detail_view(request, match_id):
+    error = _riot_profile_or_error(request.user)
+    if error:
+        return error
+    match = RiotClient().get_match(match_id, request.user.riot_server)
+    participants = match.get("metadata", {}).get("participants", [])
+    if request.user.puuid not in participants:
+        return Response(
+            {"detail": "Match not found for the verified Riot account."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    return Response(match)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def refresh_riot_profile_view(request):
+    error = _riot_profile_or_error(request.user)
+    if error:
+        return error
+    account = RiotClient().get_account_by_puuid(
+        request.user.puuid, request.user.riot_server
+    )
+    request.user.riot_game_name = account.get(
+        "gameName", request.user.riot_game_name
+    )
+    request.user.riot_tag_line = account.get("tagLine", request.user.riot_tag_line)
+    request.user.verified_at = timezone.now()
+    request.user.save(
+        update_fields=["riot_game_name", "riot_tag_line", "verified_at", "updated_at"]
+    )
+    return Response(UserSerializer(request.user).data)
