@@ -30,7 +30,8 @@ DATABASE_PORT=3306
 
 ### CORS 설정
 ```
-CORS_ALLOWED_ORIGINS=http://localhost:3000,https://yourdomain.com
+CORS_ALLOWED_ORIGINS=http://localhost:3000,https://lol.patbungman.com
+CSRF_TRUSTED_ORIGINS=https://lol.patbungman.com
 ```
 
 ## 배포 환경별 설정
@@ -57,8 +58,9 @@ DATABASE_HOST=db
 ```bash
 SECRET_KEY=production-secret-key-50-chars-minimum-change-this-value
 DEBUG=False
-ALLOWED_HOSTS=api.yourdomain.com,yourdomain.com
-CORS_ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
+ALLOWED_HOSTS=lolapi.patbungman.com
+CORS_ALLOWED_ORIGINS=https://lol.patbungman.com
+CSRF_TRUSTED_ORIGINS=https://lol.patbungman.com
 DATABASE_HOST=mysql-prod.example.com
 DATABASE_PORT=3306
 ```

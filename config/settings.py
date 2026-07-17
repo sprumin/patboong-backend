@@ -8,7 +8,16 @@ SECRET_KEY = config("SECRET_KEY", default="django-insecure-change-this-in-produc
 
 DEBUG = config("DEBUG", default=True, cast=bool)
 
-ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="*").split(",")
+def csv_config(name, default=""):
+    """Parse a comma-separated environment variable into clean values."""
+    return [
+        value.strip()
+        for value in config(name, default=default).split(",")
+        if value.strip()
+    ]
+
+
+ALLOWED_HOSTS = csv_config("ALLOWED_HOSTS", default="*")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -135,10 +144,20 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
-CORS_ALLOWED_ORIGINS = config(
-    "CORS_ALLOWED_ORIGINS", default="http://localhost:3000"
-).split(",")
+FRONTEND_ORIGIN = "https://lol.patbungman.com"
+CORS_ALLOWED_ORIGINS = list(
+    dict.fromkeys(
+        csv_config("CORS_ALLOWED_ORIGINS", default="http://localhost:3000")
+        + [FRONTEND_ORIGIN]
+    )
+)
 CORS_ALLOW_CREDENTIALS = True
+
+# Required for unsafe requests when session/cookie authentication is used.
+CSRF_TRUSTED_ORIGINS = csv_config(
+    "CSRF_TRUSTED_ORIGINS",
+    default=FRONTEND_ORIGIN,
+)
 
 RIOT_API_KEY = config("RIOT_API_KEY", default="")
 RIOT_API_TIMEOUT = config("RIOT_API_TIMEOUT", default=10, cast=int)
