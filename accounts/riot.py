@@ -72,7 +72,11 @@ class RiotClient:
 
         request = Request(
             f"https://{server.lower()}.api.riotgames.com{path}",
-            headers={"X-Riot-Token": self.api_key, "Accept": "application/json"},
+            headers={
+                "X-Riot-Token": self.api_key,
+                "Accept": "application/json",
+                "User-Agent": "patboong-backend/1.0",
+            },
         )
         try:
             with urlopen(request, timeout=self.timeout) as response:
