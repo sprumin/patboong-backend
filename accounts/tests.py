@@ -84,24 +84,14 @@ class AccountsAPITests(TestCase):
         self.assertEqual(user.puuid, "new-puuid")
         self.assertEqual(user.riot_tag_line, "NEW")
 
-    @patch("accounts.serializers.RiotClient.get_account_by_riot_id")
-    def test_add_and_view_friend_by_riot_id_is_one_way(self, get_account):
+    def test_add_and_view_friend_by_user_id_is_one_way(self):
         owner = self._create_user("owner", "owner-puuid")
         friend = self._create_user("friend", "friend-puuid")
         self.client.force_authenticate(owner)
-        get_account.return_value = {
-            "puuid": "friend-puuid",
-            "gameName": "friend",
-            "tagLine": "KR1",
-        }
 
         add_response = self.client.post(
             "/api/accounts/friends/",
-            {
-                "riot_game_name": "friend",
-                "riot_tag_line": "KR1",
-                "riot_server": "ASIA",
-            },
+            {"user_id": "friend"},
             format="json",
         )
         profile_response = self.client.get(f"/api/accounts/friends/{friend.id}/")
@@ -111,6 +101,19 @@ class AccountsAPITests(TestCase):
         self.assertTrue(Friendship.objects.filter(user=owner, friend=friend).exists())
         self.assertFalse(Friendship.objects.filter(user=friend, friend=owner).exists())
         self.assertNotIn("answer", profile_response.data)
+
+    def test_add_friend_rejects_unknown_user_id(self):
+        owner = self._create_user("owner", "owner-puuid")
+        self.client.force_authenticate(owner)
+
+        response = self.client.post(
+            "/api/accounts/friends/",
+            {"user_id": "unknown-user"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("user_id", response.data)
 
     def test_incoming_friend_requests_excludes_mutual_friends(self):
         owner = self._create_user("owner", "owner-puuid")

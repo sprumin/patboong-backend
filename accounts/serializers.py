@@ -267,21 +267,14 @@ class FriendProfileSerializer(serializers.ModelSerializer):
 
 
 class FriendAddSerializer(serializers.Serializer):
-    riot_game_name = serializers.CharField(required=True, max_length=100)
-    riot_tag_line = serializers.CharField(required=True, max_length=50)
-    riot_server = serializers.ChoiceField(required=True, choices=RIOT_SERVERS)
+    user_id = serializers.CharField(required=True, max_length=150)
 
     def create(self, validated_data):
-        account = RiotClient().get_account_by_riot_id(
-            validated_data["riot_game_name"],
-            validated_data["riot_tag_line"],
-            validated_data["riot_server"],
-        )
         try:
-            friend = User.objects.get(puuid=account["puuid"])
+            friend = User.objects.get(username=validated_data["user_id"])
         except User.DoesNotExist as exc:
             raise serializers.ValidationError(
-                {"detail": "No registered user matches this Riot ID."}
+                {"user_id": "No registered user matches this user ID."}
             ) from exc
 
         user = self.context["request"].user
