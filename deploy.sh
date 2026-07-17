@@ -15,8 +15,18 @@ echo "🚀 Starting containers..."
 docker-compose up -d
 
 echo "⏳ Waiting for database..."
-until docker-compose exec -T db mysqladmin ping -h "localhost" --silent; do
-    echo "  database is not ready yet, retrying in 2s..."
+db_attempt=1
+db_max_attempts=30
+until docker-compose exec -T backend python manage.py shell -c \
+    "from django.db import connection; connection.ensure_connection()"; do
+    if [ "$db_attempt" -ge "$db_max_attempts" ]; then
+        echo "Database connection failed after $db_max_attempts attempts."
+        docker-compose logs --tail=100 db
+        exit 1
+    fi
+
+    echo "  database is not reachable from backend yet ($db_attempt/$db_max_attempts); retrying in 2s..."
+    db_attempt=$((db_attempt + 1))
     sleep 2
 done
 echo "✅ Database is ready!"
