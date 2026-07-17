@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 if [ ! -f .env ]; then
     echo "❌ .env 파일이 없습니다. .env.example을 복사하여 .env를 생성하세요."
     echo "   cp .env.example .env"
