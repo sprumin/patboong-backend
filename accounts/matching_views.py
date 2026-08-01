@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.utils import timezone
 from drf_spectacular.utils import OpenApiExample, OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
@@ -10,6 +11,8 @@ from .matching_serializers import (
     DetailErrorSerializer,
     MatchingRecordDetailSerializer,
     MatchingRecordListResponseSerializer,
+    MatchingRecordResultResponseSerializer,
+    MatchingRecordResultUpdateSerializer,
     MatchingRecordSaveSerializer,
     MatchingSettingsErrorSerializer,
     MatchingSettingsResponseSerializer,
@@ -24,7 +27,11 @@ from .models import (
     MatchingRecord,
     MatchingRun,
     MatchingSettings,
+    User,
 )
+
+
+MAX_SAVED_MATCHING_RECORDS = 5
 
 
 SETTINGS_EXAMPLE = {
@@ -138,6 +145,9 @@ MATCHING_RECORD_DETAIL_EXAMPLE = {
     "score_difference": 0,
     "saved_at": "2026-08-01T12:00:00+09:00",
     "contains_current_user": True,
+    "winning_team": "blue",
+    "my_result": "win",
+    "result_updated_at": "2026-08-01T12:30:00+09:00",
     "participants": RECENT_PARTICIPANTS_EXAMPLE["participants"],
     "blue_team": EXAMPLE_BLUE_TEAM,
     "red_team": EXAMPLE_RED_TEAM,
@@ -161,6 +171,23 @@ def _contains_current_user(participants, user):
     return any(_is_current_user(participant, user) for participant in participants)
 
 
+def _current_user_team(record, user):
+    if any(_is_current_user(participant, user) for participant in record.blue_team):
+        return "blue"
+    if any(_is_current_user(participant, user) for participant in record.red_team):
+        return "red"
+    return None
+
+
+def _my_result(record, user):
+    if record.winning_team is None:
+        return None
+    current_team = _current_user_team(record, user)
+    if current_team is None:
+        return None
+    return "win" if current_team == record.winning_team else "loss"
+
+
 def _record_detail(record, user):
     return {
         "id": record.id,
@@ -171,6 +198,9 @@ def _record_detail(record, user):
         "score_difference": record.score_difference,
         "saved_at": record.saved_at,
         "contains_current_user": _contains_current_user(record.participants, user),
+        "winning_team": record.winning_team,
+        "my_result": _my_result(record, user),
+        "result_updated_at": record.result_updated_at,
         "participants": _participants_for_response(record.participants, user),
         "blue_team": record.blue_team,
         "red_team": record.red_team,
@@ -379,6 +409,7 @@ class MatchingRecordListCreateView(APIView):
         tags=["accounts"],
         operation_id="team_matching_records_list",
         summary="저장된 팀 매칭 기록 목록",
+        description="현재 사용자의 저장 기록을 saved_at 내림차순으로 최대 5건 반환합니다.",
         responses={
             200: MatchingRecordListResponseSerializer,
             401: OpenApiResponse(description="JWT 인증이 필요합니다."),
@@ -395,6 +426,9 @@ class MatchingRecordListCreateView(APIView):
                             "saved_at": "2026-08-01T12:00:00+09:00",
                             "participant_count": 10,
                             "contains_current_user": True,
+                            "winning_team": "blue",
+                            "my_result": "win",
+                            "result_updated_at": "2026-08-01T12:30:00+09:00",
                         }
                     ]
                 },
@@ -404,7 +438,9 @@ class MatchingRecordListCreateView(APIView):
         ],
     )
     def get(self, request):
-        records = MatchingRecord.objects.filter(owner=request.user)
+        records = MatchingRecord.objects.filter(owner=request.user).order_by(
+            "-saved_at", "-id"
+        )[:MAX_SAVED_MATCHING_RECORDS]
         results = [
             {
                 "id": record.id,
@@ -415,6 +451,9 @@ class MatchingRecordListCreateView(APIView):
                 "contains_current_user": _contains_current_user(
                     record.participants, request.user
                 ),
+                "winning_team": record.winning_team,
+                "my_result": _my_result(record, request.user),
+                "result_updated_at": record.result_updated_at,
             }
             for record in records
         ]
@@ -425,14 +464,19 @@ class MatchingRecordListCreateView(APIView):
         operation_id="team_matching_records_create",
         summary="팀 매칭 기록 저장",
         description=(
-            "team-matching 응답의 matching_run_id와 저장할 team_number를 전달합니다."
+            "team-matching 응답의 matching_run_id와 저장할 team_number를 전달합니다. "
+            "사용자별 최근 5건만 유지하며 초과 시 가장 오래된 기록을 같은 "
+            "트랜잭션에서 삭제합니다. 동일 실행·팀을 다시 저장하면 기존 기록을 "
+            "200으로 반환합니다."
         ),
         request=MatchingRecordSaveSerializer,
         responses={
+            200: MatchingRecordDetailSerializer,
             201: MatchingRecordDetailSerializer,
             400: DetailErrorSerializer,
             401: OpenApiResponse(description="JWT 인증이 필요합니다."),
             404: DetailErrorSerializer,
+            500: OpenApiResponse(description="서버 내부 오류가 발생했습니다."),
         },
         examples=[
             OpenApiExample(
@@ -442,13 +486,22 @@ class MatchingRecordListCreateView(APIView):
                     "team_number": 1,
                 },
                 request_only=True,
-            )
+            ),
+            OpenApiExample(
+                "소유하지 않은 매칭 실행",
+                value={"detail": "매칭 실행 기록을 찾을 수 없습니다."},
+                response_only=True,
+                status_codes=["404"],
+            ),
         ],
     )
     def post(self, request):
         serializer = MatchingRecordSaveSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         with transaction.atomic():
+            # Serializes all saves for one owner so concurrent requests cannot
+            # exceed the per-user record limit.
+            User.objects.select_for_update().get(pk=request.user.pk)
             matching_run = (
                 MatchingRun.objects.select_for_update()
                 .filter(
@@ -459,7 +512,7 @@ class MatchingRecordListCreateView(APIView):
             )
             if matching_run is None:
                 return Response(
-                    {"detail": "Matching run not found."},
+                    {"detail": "매칭 실행 기록을 찾을 수 없습니다."},
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
@@ -474,7 +527,7 @@ class MatchingRecordListCreateView(APIView):
             )
             if match is None:
                 return Response(
-                    {"detail": "team_number does not exist in this matching run."},
+                    {"detail": "해당 매칭 실행에 존재하지 않는 팀 번호입니다."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -494,6 +547,14 @@ class MatchingRecordListCreateView(APIView):
                     "balance_score": match["balance_score"],
                 },
             )
+            keep_ids = list(
+                MatchingRecord.objects.filter(owner=request.user)
+                .order_by("-saved_at", "-id")
+                .values_list("id", flat=True)[:MAX_SAVED_MATCHING_RECORDS]
+            )
+            MatchingRecord.objects.filter(owner=request.user).exclude(
+                id__in=keep_ids
+            ).delete()
         return Response(
             _record_detail(record, request.user),
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
@@ -511,6 +572,7 @@ class MatchingRecordDetailView(APIView):
             200: MatchingRecordDetailSerializer,
             401: OpenApiResponse(description="JWT 인증이 필요합니다."),
             404: DetailErrorSerializer,
+            500: OpenApiResponse(description="서버 내부 오류가 발생했습니다."),
         },
         examples=[
             OpenApiExample(
@@ -527,7 +589,132 @@ class MatchingRecordDetailView(APIView):
         ).first()
         if record is None:
             return Response(
-                {"detail": "Matching record not found."},
+                {"detail": "매칭 기록을 찾을 수 없습니다."},
                 status=status.HTTP_404_NOT_FOUND,
             )
         return Response(_record_detail(record, request.user))
+
+    @extend_schema(
+        tags=["accounts"],
+        operation_id="team_matching_record_result_update",
+        summary="저장된 매칭 경기 결과 설정",
+        description=(
+            "JWT 사용자와 저장된 팀 구성만을 기준으로 승리 팀을 계산합니다. "
+            "my_result에 null을 전달하면 결과를 미정으로 되돌립니다."
+        ),
+        request=MatchingRecordResultUpdateSerializer,
+        responses={
+            200: MatchingRecordResultResponseSerializer,
+            400: DetailErrorSerializer,
+            401: OpenApiResponse(description="JWT 인증이 필요합니다."),
+            404: DetailErrorSerializer,
+            500: OpenApiResponse(description="서버 내부 오류가 발생했습니다."),
+        },
+        examples=[
+            OpenApiExample(
+                "승리로 설정",
+                value={"my_result": "win"},
+                request_only=True,
+            ),
+            OpenApiExample(
+                "경기 결과 응답",
+                value={
+                    "id": "22222222-2222-4222-8222-222222222222",
+                    "winning_team": "blue",
+                    "my_result": "win",
+                    "result_updated_at": "2026-08-01T12:30:00+09:00",
+                },
+                response_only=True,
+                status_codes=["200"],
+            ),
+            OpenApiExample(
+                "현재 사용자가 팀에 없음",
+                value={"detail": "현재 사용자가 저장된 팀 구성에 없습니다."},
+                response_only=True,
+                status_codes=["400"],
+            ),
+            OpenApiExample(
+                "잘못된 경기 결과",
+                value={
+                    "my_result": [
+                        "경기 결과는 win, loss 또는 null만 사용할 수 있습니다."
+                    ]
+                },
+                response_only=True,
+                status_codes=["400"],
+            ),
+        ],
+    )
+    def patch(self, request, record_id):
+        serializer = MatchingRecordResultUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
+            record = (
+                MatchingRecord.objects.select_for_update()
+                .filter(id=record_id, owner=request.user)
+                .first()
+            )
+            if record is None:
+                return Response(
+                    {"detail": "매칭 기록을 찾을 수 없습니다."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            current_team = _current_user_team(record, request.user)
+            if current_team is None:
+                return Response(
+                    {"detail": "현재 사용자가 저장된 팀 구성에 없습니다."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            my_result = serializer.validated_data["my_result"]
+            if my_result is None:
+                record.winning_team = None
+                record.result_updated_at = None
+            else:
+                record.winning_team = (
+                    current_team
+                    if my_result == "win"
+                    else "red" if current_team == "blue" else "blue"
+                )
+                record.result_updated_at = timezone.now()
+            record.save(update_fields=["winning_team", "result_updated_at"])
+
+        return Response(
+            {
+                "id": record.id,
+                "winning_team": record.winning_team,
+                "my_result": _my_result(record, request.user),
+                "result_updated_at": record.result_updated_at,
+            }
+        )
+
+    @extend_schema(
+        tags=["accounts"],
+        operation_id="team_matching_record_destroy",
+        summary="저장된 팀 매칭 기록 삭제",
+        responses={
+            204: OpenApiResponse(description="매칭 기록이 삭제되었습니다."),
+            401: OpenApiResponse(description="JWT 인증이 필요합니다."),
+            404: DetailErrorSerializer,
+            500: OpenApiResponse(description="서버 내부 오류가 발생했습니다."),
+        },
+        examples=[
+            OpenApiExample(
+                "기록 없음 또는 소유권 없음",
+                value={"detail": "매칭 기록을 찾을 수 없습니다."},
+                response_only=True,
+                status_codes=["404"],
+            )
+        ],
+    )
+    def delete(self, request, record_id):
+        deleted, _ = MatchingRecord.objects.filter(
+            id=record_id, owner=request.user
+        ).delete()
+        if not deleted:
+            return Response(
+                {"detail": "매칭 기록을 찾을 수 없습니다."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)

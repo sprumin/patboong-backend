@@ -206,6 +206,11 @@ class MatchingRecordListItemSerializer(serializers.Serializer):
     saved_at = serializers.DateTimeField()
     participant_count = serializers.IntegerField(min_value=0)
     contains_current_user = serializers.BooleanField()
+    winning_team = serializers.ChoiceField(
+        choices=("blue", "red"), allow_null=True
+    )
+    my_result = serializers.ChoiceField(choices=("win", "loss"), allow_null=True)
+    result_updated_at = serializers.DateTimeField(allow_null=True)
 
 
 class MatchingRecordListResponseSerializer(serializers.Serializer):
@@ -221,14 +226,43 @@ class MatchingRecordDetailSerializer(serializers.Serializer):
     score_difference = serializers.FloatField()
     saved_at = serializers.DateTimeField()
     contains_current_user = serializers.BooleanField()
+    winning_team = serializers.ChoiceField(
+        choices=("blue", "red"), allow_null=True
+    )
+    my_result = serializers.ChoiceField(choices=("win", "loss"), allow_null=True)
+    result_updated_at = serializers.DateTimeField(allow_null=True)
     participants = SnapshotParticipantSerializer(many=True)
     blue_team = MatchedParticipantSerializer(many=True)
     red_team = MatchedParticipantSerializer(many=True)
 
 
+class MatchingRecordResultUpdateSerializer(serializers.Serializer):
+    my_result = serializers.JSONField(
+        allow_null=True,
+        error_messages={"required": "my_result 필드가 필요합니다."},
+    )
+
+    def validate_my_result(self, value):
+        if value not in ("win", "loss", None):
+            raise serializers.ValidationError(
+                "경기 결과는 win, loss 또는 null만 사용할 수 있습니다."
+            )
+        return value
+
+
+class MatchingRecordResultResponseSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    winning_team = serializers.ChoiceField(
+        choices=("blue", "red"), allow_null=True
+    )
+    my_result = serializers.ChoiceField(choices=("win", "loss"), allow_null=True)
+    result_updated_at = serializers.DateTimeField(allow_null=True)
+
+
 class DetailErrorSerializer(serializers.Serializer):
     detail = serializers.CharField(required=False)
     participants = serializers.JSONField(required=False)
+    my_result = serializers.JSONField(required=False)
 
 
 class MatchingSettingsErrorSerializer(serializers.Serializer):

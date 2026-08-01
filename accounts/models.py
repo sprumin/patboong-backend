@@ -170,6 +170,8 @@ class MatchingRun(models.Model):
 
 
 class MatchingRecord(models.Model):
+    WINNING_TEAM_CHOICES = (("blue", "Blue"), ("red", "Red"))
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="matching_records"
@@ -189,6 +191,10 @@ class MatchingRecord(models.Model):
     red_total_score = models.FloatField()
     score_difference = models.FloatField()
     balance_score = models.FloatField()
+    winning_team = models.CharField(
+        max_length=4, choices=WINNING_TEAM_CHOICES, null=True, blank=True
+    )
+    result_updated_at = models.DateTimeField(null=True, blank=True)
     saved_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
