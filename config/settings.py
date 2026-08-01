@@ -145,6 +145,7 @@ SIMPLE_JWT = {
 }
 
 FRONTEND_ORIGIN = "https://lol.patbungman.com"
+BACKEND_ORIGIN = "https://lolapi.patbungman.com"
 CORS_ALLOWED_ORIGINS = list(
     dict.fromkeys(
         csv_config("CORS_ALLOWED_ORIGINS", default="http://localhost:3000")
@@ -154,9 +155,11 @@ CORS_ALLOWED_ORIGINS = list(
 CORS_ALLOW_CREDENTIALS = True
 
 # Required for unsafe requests when session/cookie authentication is used.
-CSRF_TRUSTED_ORIGINS = csv_config(
-    "CSRF_TRUSTED_ORIGINS",
-    default=FRONTEND_ORIGIN,
+CSRF_TRUSTED_ORIGINS = list(
+    dict.fromkeys(
+        csv_config("CSRF_TRUSTED_ORIGINS")
+        + [FRONTEND_ORIGIN, BACKEND_ORIGIN]
+    )
 )
 
 RIOT_API_KEY = config("RIOT_API_KEY", default="")
