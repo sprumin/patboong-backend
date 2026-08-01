@@ -10,11 +10,19 @@ User = get_user_model()
 
 
 class UserSerializer(serializers.ModelSerializer):
+    user_id = serializers.CharField(source="username", read_only=True)
+    is_admin = serializers.SerializerMethodField()
+
+    def get_is_admin(self, obj) -> bool:
+        return bool(obj.is_staff)
+
     class Meta:
         model = User
         fields = (
             "id",
+            "user_id",
             "username",
+            "is_admin",
             "email",
             "main_line",
             "sub_line",
@@ -37,7 +45,14 @@ class UserSerializer(serializers.ModelSerializer):
             "verified_at",
             "created_at",
         )
-        read_only_fields = ("id", "puuid", "verified_at", "created_at")
+        read_only_fields = (
+            "id",
+            "user_id",
+            "is_admin",
+            "puuid",
+            "verified_at",
+            "created_at",
+        )
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -144,6 +159,25 @@ class RegisterSerializer(serializers.Serializer):
 class LoginSerializer(serializers.Serializer):
     user_id = serializers.CharField(required=True)
     password = serializers.CharField(required=True, write_only=True)
+
+
+class LoginResponseSerializer(serializers.Serializer):
+    refresh = serializers.CharField()
+    access = serializers.CharField()
+    user = UserSerializer()
+
+
+class LogoutSerializer(serializers.Serializer):
+    refresh = serializers.CharField()
+
+
+class DetailSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+
+
+class MatchListResponseSerializer(serializers.Serializer):
+    puuid = serializers.CharField()
+    match_ids = serializers.ListField(child=serializers.CharField())
 
 
 class ProfileUpdateSerializer(serializers.ModelSerializer):

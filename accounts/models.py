@@ -2,6 +2,57 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 
 
+DEFAULT_TIER_SCORES = {
+    "Iron IV": 100,
+    "Iron III": 150,
+    "Iron II": 200,
+    "Iron I": 250,
+    "Bronze IV": 300,
+    "Bronze III": 350,
+    "Bronze II": 400,
+    "Bronze I": 450,
+    "Silver IV": 500,
+    "Silver III": 550,
+    "Silver II": 600,
+    "Silver I": 650,
+    "Gold IV": 700,
+    "Gold III": 750,
+    "Gold II": 800,
+    "Gold I": 850,
+    "Platinum IV": 900,
+    "Platinum III": 950,
+    "Platinum II": 1000,
+    "Platinum I": 1050,
+    "Emerald IV": 1100,
+    "Emerald III": 1150,
+    "Emerald II": 1200,
+    "Emerald I": 1250,
+    "Diamond IV": 1300,
+    "Diamond III": 1350,
+    "Diamond II": 1400,
+    "Diamond I": 1450,
+    "Master": 1500,
+    "Grandmaster": 1600,
+    "Challenger": 1700,
+}
+
+DEFAULT_POSITION_BONUS = {
+    "top": 0,
+    "jungle": 0,
+    "mid": 0,
+    "adc": 0,
+    "support": 0,
+}
+
+
+def default_tier_scores():
+    return DEFAULT_TIER_SCORES.copy()
+
+
+def default_position_bonus():
+    return DEFAULT_POSITION_BONUS.copy()
+
+
 class UserManager(BaseUserManager):
     def create_user(self, username, password=None, email=None, **extra_fields):
         user = self.model(username=username, email=email or None, **extra_fields)
@@ -78,3 +129,21 @@ class Friendship(models.Model):
 
     def __str__(self):
         return f"{self.user.username} -> {self.friend.username}"
+
+
+class MatchingSettings(models.Model):
+    tier_scores = models.JSONField(default=default_tier_scores)
+    position_bonus = models.JSONField(default=default_position_bonus)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "matching_settings"
+        verbose_name_plural = "matching settings"
+
+    def save(self, *args, **kwargs):
+        # This service has one global matching configuration.
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return "Global matching settings"

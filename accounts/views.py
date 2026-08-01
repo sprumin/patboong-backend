@@ -13,7 +13,11 @@ from .riot import RiotClient
 from .serializers import (
     FriendAddSerializer,
     FriendProfileSerializer,
+    DetailSerializer,
     LoginSerializer,
+    LoginResponseSerializer,
+    LogoutSerializer,
+    MatchListResponseSerializer,
     ProfileUpdateSerializer,
     RegisterSerializer,
     UserSerializer,
@@ -89,16 +93,7 @@ class RegisterView(generics.CreateAPIView):
     description="사용자 인증 후 JWT 토큰을 발급합니다.",
     request=LoginSerializer,
     auth=[],
-    responses={
-        200: {
-            "type": "object",
-            "properties": {
-                "refresh": {"type": "string", "description": "Refresh Token"},
-                "access": {"type": "string", "description": "Access Token"},
-                "user": {"type": "object", "description": "사용자 정보"},
-            },
-        }
-    },
+    responses={200: LoginResponseSerializer},
     examples=[
         OpenApiExample(
             "로그인 요청 예시",
@@ -139,11 +134,8 @@ def login_view(request):
     tags=["accounts"],
     summary="로그아웃",
     description="Refresh Token을 블랙리스트에 추가하여 로그아웃합니다.",
-    request={
-        "type": "object",
-        "properties": {"refresh": {"type": "string", "description": "Refresh Token"}},
-    },
-    responses={200: {"description": "로그아웃 성공"}},
+    request=LogoutSerializer,
+    responses={200: DetailSerializer, 400: DetailSerializer},
 )
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -171,10 +163,26 @@ def logout_view(request):
 
 
 @extend_schema(
+    methods=["GET"],
     tags=["accounts"],
     summary="프로필 조회",
     description="현재 로그인한 사용자의 프로필 정보를 조회합니다. 비밀번호는 제외됩니다.",
     responses={200: UserSerializer},
+    examples=[
+        OpenApiExample(
+            "관리자 프로필 응답",
+            value={"id": 1, "user_id": "example", "is_admin": True},
+            response_only=True,
+            status_codes=["200"],
+        )
+    ],
+)
+@extend_schema(
+    methods=["PUT", "PATCH"],
+    tags=["accounts"],
+    summary="프로필 수정",
+    request=ProfileUpdateSerializer,
+    responses={200: UserSerializer, 400: DetailSerializer},
 )
 @api_view(["GET", "PUT", "PATCH"])
 @permission_classes([IsAuthenticated])
@@ -191,6 +199,21 @@ def profile_view(request):
     return Response(serializer.data)
 
 
+@extend_schema(
+    methods=["GET"],
+    tags=["accounts"],
+    operation_id="accounts_friends_list",
+    summary="친구 목록 조회",
+    responses={200: FriendProfileSerializer(many=True)},
+)
+@extend_schema(
+    methods=["POST"],
+    tags=["accounts"],
+    operation_id="accounts_friends_create",
+    summary="회원아이디로 친구 추가",
+    request=FriendAddSerializer,
+    responses={201: FriendProfileSerializer, 400: DetailSerializer},
+)
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def friends_view(request):
@@ -207,6 +230,12 @@ def friends_view(request):
     return Response(FriendProfileSerializer(friends, many=True).data)
 
 
+@extend_schema(
+    tags=["accounts"],
+    operation_id="accounts_friends_incoming_list",
+    summary="나를 친구로 추가한 사용자 조회",
+    responses={200: FriendProfileSerializer(many=True)},
+)
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def incoming_friend_requests_view(request):
@@ -216,6 +245,12 @@ def incoming_friend_requests_view(request):
     return Response(FriendProfileSerializer(incoming, many=True).data)
 
 
+@extend_schema(
+    tags=["accounts"],
+    operation_id="accounts_friend_profile_retrieve",
+    summary="친구 프로필 조회",
+    responses={200: FriendProfileSerializer, 404: DetailSerializer},
+)
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def friend_profile_view(request, user_id):
@@ -242,6 +277,16 @@ def _riot_profile_or_error(user):
     return None
 
 
+@extend_schema(
+    tags=["accounts"],
+    operation_id="accounts_riot_matches_list",
+    summary="최근 Riot 매치 ID 조회",
+    parameters=[
+        OpenApiParameter("start", OpenApiTypes.INT, default=0),
+        OpenApiParameter("count", OpenApiTypes.INT, default=20),
+    ],
+    responses={200: MatchListResponseSerializer, 400: DetailSerializer},
+)
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def match_list_view(request):
@@ -263,6 +308,16 @@ def match_list_view(request):
     return Response({"puuid": request.user.puuid, "match_ids": matches})
 
 
+@extend_schema(
+    tags=["accounts"],
+    operation_id="accounts_riot_match_retrieve",
+    summary="Riot 매치 상세 조회",
+    responses={
+        200: OpenApiTypes.OBJECT,
+        400: DetailSerializer,
+        404: DetailSerializer,
+    },
+)
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def match_detail_view(request, match_id):
@@ -279,6 +334,13 @@ def match_detail_view(request, match_id):
     return Response(match)
 
 
+@extend_schema(
+    tags=["accounts"],
+    operation_id="accounts_riot_profile_refresh",
+    summary="Riot 프로필 새로고침",
+    request=None,
+    responses={200: UserSerializer, 400: DetailSerializer},
+)
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def refresh_riot_profile_view(request):

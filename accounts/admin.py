@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth import get_user_model
-from .models import Friendship
+from .models import Friendship, MatchingSettings
 
 User = get_user_model()
 
@@ -20,3 +20,14 @@ class CustomUserAdmin(UserAdmin):
 class FriendshipAdmin(admin.ModelAdmin):
     list_display = ("user", "friend", "created_at")
     search_fields = ("user__username", "friend__username")
+
+
+@admin.register(MatchingSettings)
+class MatchingSettingsAdmin(admin.ModelAdmin):
+    readonly_fields = ("updated_at",)
+
+    def has_add_permission(self, request):
+        return not MatchingSettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
