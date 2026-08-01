@@ -37,6 +37,9 @@ docker-compose exec backend python manage.py collectstatic --noinput
 echo "📦 Running migrations..."
 docker-compose exec backend python manage.py migrate
 
+echo "🔄 Restarting backend with collected static files..."
+docker-compose restart backend
+
 echo ""
 echo "=================================================="
 echo "✅ 배포 완료!"
