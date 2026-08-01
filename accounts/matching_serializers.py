@@ -179,8 +179,51 @@ class TeamMatchSerializer(serializers.Serializer):
 
 
 class TeamMatchingResponseSerializer(serializers.Serializer):
+    matching_run_id = serializers.UUIDField()
     matches = TeamMatchSerializer(many=True)
     unmatched_participants = TeamMatchingParticipantSerializer(many=True)
+
+
+class SnapshotParticipantSerializer(TeamMatchingParticipantSerializer):
+    is_current_user = serializers.BooleanField(read_only=True)
+
+
+class RecentParticipantsResponseSerializer(serializers.Serializer):
+    matching_run_id = serializers.UUIDField(allow_null=True)
+    created_at = serializers.DateTimeField(allow_null=True)
+    participants = SnapshotParticipantSerializer(many=True)
+
+
+class MatchingRecordSaveSerializer(serializers.Serializer):
+    matching_run_id = serializers.UUIDField()
+    team_number = serializers.IntegerField(min_value=1)
+
+
+class MatchingRecordListItemSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    team_number = serializers.IntegerField()
+    balance_score = serializers.FloatField(min_value=0, max_value=100)
+    saved_at = serializers.DateTimeField()
+    participant_count = serializers.IntegerField(min_value=0)
+    contains_current_user = serializers.BooleanField()
+
+
+class MatchingRecordListResponseSerializer(serializers.Serializer):
+    results = MatchingRecordListItemSerializer(many=True)
+
+
+class MatchingRecordDetailSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    team_number = serializers.IntegerField()
+    balance_score = serializers.FloatField(min_value=0, max_value=100)
+    blue_total_score = serializers.FloatField()
+    red_total_score = serializers.FloatField()
+    score_difference = serializers.FloatField()
+    saved_at = serializers.DateTimeField()
+    contains_current_user = serializers.BooleanField()
+    participants = SnapshotParticipantSerializer(many=True)
+    blue_team = MatchedParticipantSerializer(many=True)
+    red_team = MatchedParticipantSerializer(many=True)
 
 
 class DetailErrorSerializer(serializers.Serializer):

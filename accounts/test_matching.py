@@ -2,7 +2,13 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from .models import DEFAULT_POSITION_BONUS, DEFAULT_TIER_SCORES, MatchingSettings
+from .models import (
+    DEFAULT_POSITION_BONUS,
+    DEFAULT_TIER_SCORES,
+    MatchingRecord,
+    MatchingRun,
+    MatchingSettings,
+)
 
 
 User = get_user_model()
@@ -171,6 +177,10 @@ class TeamMatchingAPITests(TestCase):
         )
         self.assertEqual(match["score_difference"], 0)
         self.assertEqual(match["balance_score"], 100)
+        matching_run = MatchingRun.objects.get(id=response.data["matching_run_id"])
+        self.assertEqual(matching_run.owner, self.user)
+        self.assertEqual(matching_run.participants[0]["primary_position"], "top")
+        self.assertEqual(matching_run.participants[0]["primary_tier"], "Gold II")
 
     def test_uses_saved_position_bonus_in_score(self):
         MatchingSettings.objects.create(position_bonus={"jungle": 5})
@@ -257,6 +267,212 @@ class TeamMatchingAPITests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data["matches"]), 1)
         self.assertEqual(response.data["unmatched_participants"][0]["id"], 11)
+
+
+class MatchingHistoryAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="owner",
+            password="Password123!",
+            email="owner@example.com",
+        )
+
+    def participant(
+        self,
+        participant_id,
+        position,
+        *,
+        preference="primary",
+        is_guest=False,
+        tier="Gold II",
+    ):
+        secondary = "mid" if position != "mid" else "adc"
+        return {
+            "id": participant_id,
+            "name": f"Player{participant_id}#KR1",
+            "primary_position": position,
+            "primary_tier": tier,
+            "secondary_position": secondary,
+            "secondary_tier": "Gold IV",
+            "position_preference": preference,
+            "is_guest": is_guest,
+        }
+
+    def ten_participants(self):
+        return [
+            self.participant(index, position)
+            for index, position in enumerate(
+                ("top", "jungle", "mid", "adc", "support") * 2,
+                start=1,
+            )
+        ]
+
+    def run_matching(self, participants=None):
+        self.client.force_authenticate(self.user)
+        return self.client.post(
+            "/api/accounts/team-matching/",
+            {"participants": participants or self.ten_participants()},
+            format="json",
+        )
+
+    def test_recent_participants_returns_empty_when_no_run_exists(self):
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get(
+            "/api/accounts/team-matching/recent-participants/"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data["matching_run_id"])
+        self.assertIsNone(response.data["created_at"])
+        self.assertEqual(response.data["participants"], [])
+
+    def test_recent_participants_preserves_order_guest_and_current_user(self):
+        participants = self.ten_participants()
+        participants[0]["id"] = self.user.id
+        participants[9] = self.participant(
+            "guest-uuid", "support", is_guest=True, tier="Silver II"
+        )
+        participants[9]["secondary_tier"] = "Silver IV"
+        run_response = self.run_matching(participants)
+
+        response = self.client.get(
+            "/api/accounts/team-matching/recent-participants/"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            str(response.data["matching_run_id"]),
+            str(run_response.data["matching_run_id"]),
+        )
+        self.assertEqual(
+            [item["id"] for item in response.data["participants"]],
+            [item["id"] for item in participants],
+        )
+        self.assertIs(response.data["participants"][0]["is_current_user"], True)
+        self.assertIs(response.data["participants"][9]["is_guest"], True)
+        self.assertIs(response.data["participants"][9]["is_current_user"], False)
+        self.assertEqual(response.data["participants"][9]["primary_tier"], "Silver II")
+
+    def test_recent_participants_is_isolated_by_owner_and_uses_latest_run(self):
+        first = self.ten_participants()
+        first[0]["name"] = "First#KR1"
+        self.run_matching(first)
+        second = self.ten_participants()
+        second[0]["name"] = "Second#KR1"
+        latest = self.run_matching(second)
+
+        other = User.objects.create_user(
+            username="other",
+            password="Password123!",
+            email="other@example.com",
+        )
+        self.client.force_authenticate(other)
+        other_response = self.client.get(
+            "/api/accounts/team-matching/recent-participants/"
+        )
+        self.client.force_authenticate(self.user)
+        owner_response = self.client.get(
+            "/api/accounts/team-matching/recent-participants/"
+        )
+
+        self.assertEqual(other_response.data["participants"], [])
+        self.assertEqual(owner_response.data["participants"][0]["name"], "Second#KR1")
+        self.assertEqual(
+            str(owner_response.data["matching_run_id"]),
+            str(latest.data["matching_run_id"]),
+        )
+
+    def test_save_list_and_detail_preserve_original_participants_and_teams(self):
+        participants = self.ten_participants()
+        participants[0]["id"] = self.user.id
+        participants[9] = self.participant(
+            "guest-uuid", "support", is_guest=True, tier="Silver II"
+        )
+        run_response = self.run_matching(participants)
+
+        save_response = self.client.post(
+            "/api/accounts/team-matching/records/",
+            {
+                "matching_run_id": run_response.data["matching_run_id"],
+                "team_number": 1,
+            },
+            format="json",
+        )
+        list_response = self.client.get("/api/accounts/team-matching/records/")
+        detail_response = self.client.get(
+            f"/api/accounts/team-matching/records/{save_response.data['id']}/"
+        )
+
+        self.assertEqual(save_response.status_code, 201)
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(len(list_response.data["results"]), 1)
+        summary = list_response.data["results"][0]
+        self.assertEqual(summary["participant_count"], 10)
+        self.assertIs(summary["contains_current_user"], True)
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(len(detail_response.data["participants"]), 10)
+        self.assertEqual(len(detail_response.data["blue_team"]), 5)
+        self.assertEqual(len(detail_response.data["red_team"]), 5)
+        self.assertIs(detail_response.data["contains_current_user"], True)
+        guest = next(
+            item
+            for item in detail_response.data["participants"]
+            if item["id"] == "guest-uuid"
+        )
+        self.assertIs(guest["is_guest"], True)
+        self.assertEqual(guest["primary_tier"], "Silver II")
+        self.assertEqual(MatchingRecord.objects.count(), 1)
+
+    def test_record_without_current_user_is_visible_to_owner_but_flagged_false(self):
+        participants = [
+            self.participant(index + 100, position)
+            for index, position in enumerate(
+                ("top", "jungle", "mid", "adc", "support") * 2, start=1
+            )
+        ]
+        run_response = self.run_matching(participants)
+        saved = self.client.post(
+            "/api/accounts/team-matching/records/",
+            {
+                "matching_run_id": run_response.data["matching_run_id"],
+                "team_number": 1,
+            },
+            format="json",
+        )
+
+        detail = self.client.get(
+            f"/api/accounts/team-matching/records/{saved.data['id']}/"
+        )
+
+        self.assertEqual(detail.status_code, 200)
+        self.assertIs(detail.data["contains_current_user"], False)
+
+    def test_other_user_cannot_access_saved_record(self):
+        run_response = self.run_matching()
+        saved = self.client.post(
+            "/api/accounts/team-matching/records/",
+            {
+                "matching_run_id": run_response.data["matching_run_id"],
+                "team_number": 1,
+            },
+            format="json",
+        )
+        other = User.objects.create_user(
+            username="other",
+            password="Password123!",
+            email="other@example.com",
+        )
+        self.client.force_authenticate(other)
+
+        detail = self.client.get(
+            f"/api/accounts/team-matching/records/{saved.data['id']}/"
+        )
+        listing = self.client.get("/api/accounts/team-matching/records/")
+
+        self.assertEqual(detail.status_code, 404)
+        self.assertEqual(listing.data["results"], [])
 
 
 class ProfileAdminFlagTests(TestCase):

@@ -8,13 +8,23 @@ from rest_framework.views import APIView
 from .matching import complete_settings, create_team_matches, get_matching_settings
 from .matching_serializers import (
     DetailErrorSerializer,
+    MatchingRecordDetailSerializer,
+    MatchingRecordListResponseSerializer,
+    MatchingRecordSaveSerializer,
     MatchingSettingsErrorSerializer,
     MatchingSettingsResponseSerializer,
     MatchingSettingsSerializer,
+    RecentParticipantsResponseSerializer,
     TeamMatchingRequestSerializer,
     TeamMatchingResponseSerializer,
 )
-from .models import DEFAULT_POSITION_BONUS, DEFAULT_TIER_SCORES, MatchingSettings
+from .models import (
+    DEFAULT_POSITION_BONUS,
+    DEFAULT_TIER_SCORES,
+    MatchingRecord,
+    MatchingRun,
+    MatchingSettings,
+)
 
 
 SETTINGS_EXAMPLE = {
@@ -82,6 +92,7 @@ EXAMPLE_RED_TEAM = [
     )
 ]
 TEAM_MATCHING_RESPONSE_EXAMPLE = {
+    "matching_run_id": "11111111-1111-4111-8111-111111111111",
     "matches": [
         {
             "team_number": 1,
@@ -95,6 +106,75 @@ TEAM_MATCHING_RESPONSE_EXAMPLE = {
     ],
     "unmatched_participants": [],
 }
+
+RECENT_PARTICIPANTS_EXAMPLE = {
+    "matching_run_id": "11111111-1111-4111-8111-111111111111",
+    "created_at": "2026-08-01T12:00:00+09:00",
+    "participants": [
+        {
+            **TEAM_MATCHING_REQUEST_EXAMPLE["participants"][0],
+            "is_current_user": True,
+        },
+        {
+            "id": "guest-11111111",
+            "name": "Guest#KR1",
+            "primary_position": "top",
+            "primary_tier": "Silver II",
+            "secondary_position": "jungle",
+            "secondary_tier": "Silver IV",
+            "position_preference": "primary",
+            "is_guest": True,
+            "is_current_user": False,
+        },
+    ],
+}
+
+MATCHING_RECORD_DETAIL_EXAMPLE = {
+    "id": "22222222-2222-4222-8222-222222222222",
+    "team_number": 1,
+    "balance_score": 100,
+    "blue_total_score": 4000,
+    "red_total_score": 4000,
+    "score_difference": 0,
+    "saved_at": "2026-08-01T12:00:00+09:00",
+    "contains_current_user": True,
+    "participants": RECENT_PARTICIPANTS_EXAMPLE["participants"],
+    "blue_team": EXAMPLE_BLUE_TEAM,
+    "red_team": EXAMPLE_RED_TEAM,
+}
+
+
+def _is_current_user(participant, user):
+    return not participant.get("is_guest", False) and str(
+        participant.get("id")
+    ) == str(user.pk)
+
+
+def _participants_for_response(participants, user):
+    return [
+        {**participant, "is_current_user": _is_current_user(participant, user)}
+        for participant in participants
+    ]
+
+
+def _contains_current_user(participants, user):
+    return any(_is_current_user(participant, user) for participant in participants)
+
+
+def _record_detail(record, user):
+    return {
+        "id": record.id,
+        "team_number": record.team_number,
+        "balance_score": record.balance_score,
+        "blue_total_score": record.blue_total_score,
+        "red_total_score": record.red_total_score,
+        "score_difference": record.score_difference,
+        "saved_at": record.saved_at,
+        "contains_current_user": _contains_current_user(record.participants, user),
+        "participants": _participants_for_response(record.participants, user),
+        "blue_team": record.blue_team,
+        "red_team": record.red_team,
+    }
 
 
 class MatchingSettingsView(APIView):
@@ -226,7 +306,228 @@ class TeamMatchingView(APIView):
 
         serializer = TeamMatchingRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        result = create_team_matches(
-            serializer.validated_data["participants"], get_matching_settings()
+        normalized_participants = serializer.validated_data["participants"]
+        result = create_team_matches(normalized_participants, get_matching_settings())
+        with transaction.atomic():
+            matching_run = MatchingRun.objects.create(
+                owner=request.user,
+                participants=normalized_participants,
+                matches=result["matches"],
+                unmatched_participants=result["unmatched_participants"],
+            )
+        return Response({"matching_run_id": matching_run.id, **result})
+
+
+class RecentMatchingParticipantsView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    @extend_schema(
+        tags=["accounts"],
+        summary="직전 팀 매칭 참가자 조회",
+        description=(
+            "현재 사용자가 가장 최근 실행한 매칭의 원본 참가자를 입력 순서대로 "
+            "반환합니다. 저장 여부와 무관하며 기록이 없으면 빈 목록을 반환합니다."
+        ),
+        responses={
+            200: RecentParticipantsResponseSerializer,
+            401: OpenApiResponse(description="JWT 인증이 필요합니다."),
+        },
+        examples=[
+            OpenApiExample(
+                "최근 참가자",
+                value=RECENT_PARTICIPANTS_EXAMPLE,
+                response_only=True,
+                status_codes=["200"],
+            ),
+            OpenApiExample(
+                "실행 기록 없음",
+                value={
+                    "matching_run_id": None,
+                    "created_at": None,
+                    "participants": [],
+                },
+                response_only=True,
+                status_codes=["200"],
+            ),
+        ],
+    )
+    def get(self, request):
+        matching_run = MatchingRun.objects.filter(owner=request.user).first()
+        if matching_run is None:
+            return Response(
+                {
+                    "matching_run_id": None,
+                    "created_at": None,
+                    "participants": [],
+                }
+            )
+        return Response(
+            {
+                "matching_run_id": matching_run.id,
+                "created_at": matching_run.created_at,
+                "participants": _participants_for_response(
+                    matching_run.participants, request.user
+                ),
+            }
         )
-        return Response(result)
+
+
+class MatchingRecordListCreateView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    @extend_schema(
+        tags=["accounts"],
+        operation_id="team_matching_records_list",
+        summary="저장된 팀 매칭 기록 목록",
+        responses={
+            200: MatchingRecordListResponseSerializer,
+            401: OpenApiResponse(description="JWT 인증이 필요합니다."),
+        },
+        examples=[
+            OpenApiExample(
+                "저장 기록 목록",
+                value={
+                    "results": [
+                        {
+                            "id": "22222222-2222-4222-8222-222222222222",
+                            "team_number": 1,
+                            "balance_score": 100,
+                            "saved_at": "2026-08-01T12:00:00+09:00",
+                            "participant_count": 10,
+                            "contains_current_user": True,
+                        }
+                    ]
+                },
+                response_only=True,
+                status_codes=["200"],
+            )
+        ],
+    )
+    def get(self, request):
+        records = MatchingRecord.objects.filter(owner=request.user)
+        results = [
+            {
+                "id": record.id,
+                "team_number": record.team_number,
+                "balance_score": record.balance_score,
+                "saved_at": record.saved_at,
+                "participant_count": len(record.participants),
+                "contains_current_user": _contains_current_user(
+                    record.participants, request.user
+                ),
+            }
+            for record in records
+        ]
+        return Response({"results": results})
+
+    @extend_schema(
+        tags=["accounts"],
+        operation_id="team_matching_records_create",
+        summary="팀 매칭 기록 저장",
+        description=(
+            "team-matching 응답의 matching_run_id와 저장할 team_number를 전달합니다."
+        ),
+        request=MatchingRecordSaveSerializer,
+        responses={
+            201: MatchingRecordDetailSerializer,
+            400: DetailErrorSerializer,
+            401: OpenApiResponse(description="JWT 인증이 필요합니다."),
+            404: DetailErrorSerializer,
+        },
+        examples=[
+            OpenApiExample(
+                "첫 번째 매치 저장",
+                value={
+                    "matching_run_id": "11111111-1111-4111-8111-111111111111",
+                    "team_number": 1,
+                },
+                request_only=True,
+            )
+        ],
+    )
+    def post(self, request):
+        serializer = MatchingRecordSaveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
+            matching_run = (
+                MatchingRun.objects.select_for_update()
+                .filter(
+                    id=serializer.validated_data["matching_run_id"],
+                    owner=request.user,
+                )
+                .first()
+            )
+            if matching_run is None:
+                return Response(
+                    {"detail": "Matching run not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            team_number = serializer.validated_data["team_number"]
+            match = next(
+                (
+                    item
+                    for item in matching_run.matches
+                    if item["team_number"] == team_number
+                ),
+                None,
+            )
+            if match is None:
+                return Response(
+                    {"detail": "team_number does not exist in this matching run."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            start = (team_number - 1) * 10
+            participants = matching_run.participants[start : start + 10]
+            record, created = MatchingRecord.objects.get_or_create(
+                owner=request.user,
+                matching_run=matching_run,
+                team_number=team_number,
+                defaults={
+                    "participants": participants,
+                    "blue_team": match["blue_team"],
+                    "red_team": match["red_team"],
+                    "blue_total_score": match["blue_total_score"],
+                    "red_total_score": match["red_total_score"],
+                    "score_difference": match["score_difference"],
+                    "balance_score": match["balance_score"],
+                },
+            )
+        return Response(
+            _record_detail(record, request.user),
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+
+class MatchingRecordDetailView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    @extend_schema(
+        tags=["accounts"],
+        operation_id="team_matching_record_retrieve",
+        summary="저장된 팀 매칭 기록 상세",
+        responses={
+            200: MatchingRecordDetailSerializer,
+            401: OpenApiResponse(description="JWT 인증이 필요합니다."),
+            404: DetailErrorSerializer,
+        },
+        examples=[
+            OpenApiExample(
+                "저장 기록 상세",
+                value=MATCHING_RECORD_DETAIL_EXAMPLE,
+                response_only=True,
+                status_codes=["200"],
+            )
+        ],
+    )
+    def get(self, request, record_id):
+        record = MatchingRecord.objects.filter(
+            id=record_id, owner=request.user
+        ).first()
+        if record is None:
+            return Response(
+                {"detail": "Matching record not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(_record_detail(record, request.user))

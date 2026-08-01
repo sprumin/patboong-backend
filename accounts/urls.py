@@ -1,6 +1,11 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
-from .matching_views import TeamMatchingView
+from .matching_views import (
+    MatchingRecordDetailView,
+    MatchingRecordListCreateView,
+    RecentMatchingParticipantsView,
+    TeamMatchingView,
+)
 from .views import (
     RegisterView,
     friend_profile_view,
@@ -26,5 +31,20 @@ urlpatterns = [
     path("matches/", match_list_view, name="matches"),
     path("matches/<str:match_id>/", match_detail_view, name="match-detail"),
     path("team-matching/", TeamMatchingView.as_view(), name="team-matching"),
+    path(
+        "team-matching/recent-participants/",
+        RecentMatchingParticipantsView.as_view(),
+        name="recent-matching-participants",
+    ),
+    path(
+        "team-matching/records/",
+        MatchingRecordListCreateView.as_view(),
+        name="matching-records",
+    ),
+    path(
+        "team-matching/records/<uuid:record_id>/",
+        MatchingRecordDetailView.as_view(),
+        name="matching-record-detail",
+    ),
     path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
 ]

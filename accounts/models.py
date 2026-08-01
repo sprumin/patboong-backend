@@ -1,3 +1,5 @@
+import uuid
+
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 
@@ -147,3 +149,57 @@ class MatchingSettings(models.Model):
 
     def __str__(self):
         return "Global matching settings"
+
+
+class MatchingRun(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="matching_runs"
+    )
+    participants = models.JSONField(default=list)
+    matches = models.JSONField(default=list)
+    unmatched_participants = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "matching_runs"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.owner.username} - {self.created_at}"
+
+
+class MatchingRecord(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="matching_records"
+    )
+    matching_run = models.ForeignKey(
+        MatchingRun,
+        on_delete=models.SET_NULL,
+        related_name="saved_records",
+        null=True,
+        blank=True,
+    )
+    team_number = models.PositiveIntegerField()
+    participants = models.JSONField(default=list)
+    blue_team = models.JSONField(default=list)
+    red_team = models.JSONField(default=list)
+    blue_total_score = models.FloatField()
+    red_total_score = models.FloatField()
+    score_difference = models.FloatField()
+    balance_score = models.FloatField()
+    saved_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "matching_records"
+        ordering = ["-saved_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=("owner", "matching_run", "team_number"),
+                name="unique_saved_matching_team",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.owner.username} - team {self.team_number}"
